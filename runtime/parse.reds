@@ -11,7 +11,7 @@ Red/System [
 ]
 
 parser: context [
-	verbose: 0
+	verbose: 2
 	
 	series: as red-block! 0
 	rules:  as red-block! 0
@@ -277,6 +277,7 @@ parser: context [
 			match? [logic!]
 	][
 		s: GET_BUFFER(rules)
+		assert s/offset <= (s/tail - 2)
 		pos*: as positions! s/tail - 2
 		s: GET_BUFFER(input)
 		
@@ -680,6 +681,7 @@ parser: context [
 	][
 		if rules/head > 0 [
 			s: GET_BUFFER(rules)
+			assert s/offset <= (s/tail - 1)
 			s/tail: s/tail - 1
 			p: as positions! s/tail
 			series/head: p/input
@@ -820,6 +822,7 @@ parser: context [
 						ended?: cmd = tail
 						
 						s: GET_BUFFER(rules)
+						assert s/offset <= (s/tail - 2)
 						copy-cell s/tail - 1 as red-value! rule
 						assert TYPE_OF(rule) = TYPE_BLOCK
 						p: as positions! s/tail - 2
@@ -873,6 +876,7 @@ parser: context [
 						state: either pop? [pop?: no ST_POP_BLOCK][ST_NEXT_ACTION]
 					][
 						pop?: yes
+						assert s/offset <= (s/tail - 3)
 						p: as positions! s/tail - 2
 						int: as red-integer! value
 						switch int/value [
@@ -1134,7 +1138,7 @@ parser: context [
 						if pop? [
 							PARSE_TRACE(_pop)
 							s/tail: s/tail - 3			;-- pop rule stack frame
-							if s/tail > s/offset [
+							if s/tail - 2 >= s/offset [
 								p: as positions! s/tail - 2
 								p/sub: int/value		;-- save rule type in parent stack frame
 							]
@@ -1148,7 +1152,7 @@ parser: context [
 					value: s/tail - 1
 					
 					state: either any [					;-- order of conditional expressions matters!
-						zero? block/rs-length? rules
+						zero? block/rs-length? rules	;@@ needs a better check
 						TYPE_OF(value) <> TYPE_INTEGER
 					][
 						either match? [ST_NEXT_ACTION][ST_FIND_ALTERN]
@@ -1269,7 +1273,11 @@ parser: context [
 					state: either cmd = tail [
 						s: GET_BUFFER(rules)
 						value: s/tail - 1
-						either TYPE_OF(value) = TYPE_INTEGER [ST_POP_RULE][ST_POP_BLOCK]
+						
+						either all [
+							s/offset < value
+							TYPE_OF(value) = TYPE_INTEGER
+						][ST_POP_RULE][ST_POP_BLOCK]
 					][
 						PARSE_TRACE(_fetch)
 						value: cmd
@@ -1373,6 +1381,7 @@ parser: context [
 									PARSE_TRACE(_match)
 									s: GET_BUFFER(rules)
 									PARSE_TRACE(_pop)
+									assert s/offset <= (s/tail - 3)
 									s/tail: s/tail - 3	;-- pop rule stack frame
 									state: ST_CHECK_PENDING
 								]
@@ -1383,8 +1392,11 @@ parser: context [
 				]
 				ST_FIND_ALTERN [
 					s: GET_BUFFER(rules)				;-- backtrack input
+					;assert s/offset <= (s/tail - 2)
 					p: as positions! s/tail - 2
-					input/head: p/input
+					if p >= s/offset [
+						input/head: p/input
+					]
 					PARSE_CHECK_INPUT_EMPTY?			;-- refresh end? flag after backtracking
 					
 					cnt: find-altern rule cmd
@@ -1410,7 +1422,10 @@ parser: context [
 							cmd: tail
 							s: GET_BUFFER(rules)
 							value: s/tail - 1
-							state: either TYPE_OF(value) = TYPE_INTEGER [ST_POP_RULE][ST_POP_BLOCK]
+							state: either all [
+								s/offset <= value
+								TYPE_OF(value) = TYPE_INTEGER
+							][ST_POP_RULE][ST_POP_BLOCK]
 						]
 						sym = words/skip [				;-- SKIP
 							PARSE_CHECK_INPUT_EMPTY?
